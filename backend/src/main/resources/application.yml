@@ -1,0 +1,111 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: ai-doc-workspace
+
+  # MySQL
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DB:doc_workspace}?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:root123}
+
+  # Redis
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: 0
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
+          max-wait: 3000ms
+
+  # Jackson
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: Asia/Shanghai
+    default-property-inclusion: non_null
+
+  # File Upload
+  servlet:
+    multipart:
+      max-file-size: 500MB
+      max-request-size: 500MB
+
+# MyBatis-Plus
+mybatis-plus:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.docwork.entity
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# MinIO
+minio:
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  access-key: ${MINIO_ACCESS_KEY:minioadmin}
+  secret-key: ${MINIO_SECRET_KEY:minioadmin}
+  bucket-name: ${MINIO_BUCKET:doc-workspace}
+  chunk-bucket: ${MINIO_CHUNK_BUCKET:doc-chunks}
+
+# RocketMQ
+rocketmq:
+  name-server: ${ROCKETMQ_NAMESRV:localhost:9876}
+  producer:
+    group: doc-workspace-producer
+    send-message-timeout: 10000
+    retry-times-when-send-failed: 3
+
+# JWT
+jwt:
+  secret: ${JWT_SECRET:mySecretKeyForJWTTokenGenerationMustBeAtLeast256BitsLong!!}
+  expiration: 86400000  # 24 hours
+  refresh-expiration: 604800000  # 7 days
+
+# AI Service
+ai-service:
+  url: ${AI_SERVICE_URL:http://localhost:8000}
+  timeout: 60000
+
+# XXL-Job
+xxl:
+  job:
+    enabled: false
+    admin:
+      addresses: ${XXL_JOB_ADMIN:http://localhost:8088/xxl-job-admin}
+    accessToken: ${XXL_JOB_TOKEN:default_token}
+    executor:
+      appname: doc-workspace-executor
+      port: 9999
+      logpath: ./logs/xxl-job
+      logretentiondays: 30
+
+# Storage Quota
+quota:
+  default-space-size: 10737418240  # 10GB per user
+  max-file-size: 5368709120       # 5GB per file
+  chunk-size: 5242880             # 5MB per chunk
+
+# Share Link
+share:
+  max-expire-days: 30
+  default-expire-hours: 24
+
+logging:
+  level:
+    com.docwork: debug
+    org.springframework.security: info
