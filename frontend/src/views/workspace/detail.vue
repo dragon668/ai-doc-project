@@ -11,6 +11,9 @@
         <el-button type="primary" @click="showUploadDialog = true">
           <el-icon><Upload /></el-icon> 上传文档
         </el-button>
+        <el-button @click="createBlankDocument">
+          <el-icon><Document /></el-icon> 新建文档
+        </el-button>
         <el-button @click="$router.push(`/ai/${workspaceId}`)">
           <el-icon><ChatDotRound /></el-icon> AI问答
         </el-button>
@@ -95,7 +98,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getWorkspace } from '@/api/workspace'
-import { listDocuments, deleteDocument, getVersionHistory, rollbackVersion } from '@/api/document'
+import { listDocuments, deleteDocument, getVersionHistory, rollbackVersion, createTextDocument } from '@/api/document'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ChunkUpload from '@/components/upload/ChunkUpload.vue'
 
@@ -188,6 +191,36 @@ async function createShareLink() {
     showShareDialog.value = false
   } else {
     ElMessage.error(res.message || '生成分享链接失败')
+  }
+}
+
+async function createBlankDocument() {
+  try {
+    const { value } = await ElMessageBox.prompt('请输入文档名称', '新建 Markdown 文档', {
+      confirmButtonText: '创建',
+      cancelButtonText: '取消',
+      inputValue: '新建文档.md',
+      inputPattern: /\S/,
+      inputErrorMessage: '文档名称不能为空'
+    })
+
+    const title = String(value || '').trim() || '新建文档.md'
+    const fileName = title.endsWith('.md') || title.endsWith('.txt') ? title : `${title}.md`
+    const content = `# ${fileName.replace(/\.(md|txt)$/i, '')}\n\n`
+
+    const res = await createTextDocument({
+      workspaceId,
+      title: fileName,
+      content
+    })
+
+    ElMessage.success('文档已创建')
+    await loadDocuments()
+    router.push(`/document/${res.data.id}`)
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error?.response?.data?.message || '创建文档失败')
+    }
   }
 }
 

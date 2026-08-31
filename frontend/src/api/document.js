@@ -8,6 +8,10 @@ export function getDocument(id) {
   return request.get(`/doc/${id}`)
 }
 
+export function createTextDocument(payload) {
+  return request.post('/doc/text', payload)
+}
+
 export function getDocumentContent(id) {
   return request.get(`/doc/${id}/content`)
 }

@@ -1,5 +1,6 @@
 package com.docwork.controller;
 
+import com.docwork.common.BusinessException;
 import com.docwork.common.Constants;
 import com.docwork.common.Result;
 import com.docwork.dto.ChunkUploadDTO;
@@ -111,6 +112,22 @@ public class DocumentController {
 
         Long userId = UserContext.getCurrentUserId();
         return Result.success(documentService.listDocuments(workspaceId, folderId, page, size, userId));
+    }
+
+    /** 创建空白文本文档 */
+    @PostMapping("/text")
+    public Result<Document> createTextDocument(@RequestBody java.util.Map<String, Object> body) {
+        Long userId = UserContext.getCurrentUserId();
+        Long workspaceId = body == null || body.get("workspaceId") == null ? null : Long.valueOf(String.valueOf(body.get("workspaceId")));
+        Long folderId = body == null || body.get("folderId") == null ? null : Long.valueOf(String.valueOf(body.get("folderId")));
+        String title = body == null || body.get("title") == null ? "新建文档.md" : String.valueOf(body.get("title"));
+        String content = body == null || body.get("content") == null ? "# 新建文档\n\n" : String.valueOf(body.get("content"));
+
+        if (workspaceId == null) {
+            throw new BusinessException(400, "workspaceId 不能为空");
+        }
+
+        return Result.success(documentService.createTextDocument(title, content, workspaceId, folderId, userId));
     }
 
     /** 获取文档详情 */

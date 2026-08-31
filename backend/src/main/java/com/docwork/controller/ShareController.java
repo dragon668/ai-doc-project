@@ -1,9 +1,11 @@
 package com.docwork.controller;
 
 import com.docwork.common.Result;
+import com.docwork.entity.Document;
 import com.docwork.entity.ShareLink;
 import com.docwork.interceptor.UserContext;
 import com.docwork.service.ShareService;
+import com.docwork.service.StorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,6 +17,7 @@ import java.util.Map;
 public class ShareController {
 
     private final ShareService shareService;
+    private final StorageService storageService;
 
     /** 创建分享链接 */
     @PostMapping
@@ -38,6 +41,28 @@ public class ShareController {
     public Result<Void> verify(@PathVariable String code, @RequestBody Map<String, String> body) {
         shareService.verifyAndAccess(code, body.get("password"));
         return Result.success();
+    }
+
+    /** 公开只读获取共享文档信息 */
+    @GetMapping("/doc/{code}")
+    public Result<Document> getSharedDocument(@PathVariable String code,
+                                              @RequestHeader(value = "X-Share-Password", required = false) String password) {
+        return Result.success(shareService.getSharedDocument(code, password));
+    }
+
+    /** 公开只读获取共享文档文本内容(markdown/txt) */
+    @GetMapping("/doc/{code}/content")
+    public Result<String> getSharedDocumentContent(@PathVariable String code,
+                                                   @RequestHeader(value = "X-Share-Password", required = false) String password) {
+        return Result.success(shareService.getSharedDocumentContent(code, password));
+    }
+
+    /** 公开只读获取共享文档下载地址(非文本文件) */
+    @GetMapping("/doc/{code}/download")
+    public Result<String> getSharedDownloadUrl(@PathVariable String code,
+                                               @RequestHeader(value = "X-Share-Password", required = false) String password) {
+        Document doc = shareService.getSharedDocument(code, password);
+        return Result.success(storageService.getPresignedUrl(doc.getFileKey()));
     }
 
     /** 删除分享链接 */

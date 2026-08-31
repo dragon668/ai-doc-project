@@ -37,7 +37,7 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/auth/login", "/auth/register", "/auth/refresh").permitAll()
-                .requestMatchers("/share/view/**", "/share/verify/**").permitAll()
+                .requestMatchers("/share/view/**", "/share/verify/**", "/share/doc/**").permitAll()
                 .requestMatchers("/health", "/actuator/**").permitAll()
                 .anyRequest().authenticated()
             )

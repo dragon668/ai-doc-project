@@ -20,7 +20,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -56,6 +60,51 @@ public class DocumentServiceImpl implements DocumentService {
         version.setFileKey(fileKey);
         version.setFileSize(fileSize);
         version.setRemark("初始版本");
+        version.setOperatorId(creatorId);
+        versionMapper.insert(version);
+
+        return doc;
+    }
+
+    @Override
+    @Transactional
+    public Document createTextDocument(String title, String content, Long workspaceId, Long folderId, Long creatorId) {
+        if (workspaceId == null || creatorId == null) {
+            throw new BusinessException(400, "workspaceId 和 creatorId 不能为空");
+        }
+
+        String normalizedTitle = (title == null || title.trim().isEmpty()) ? "新建文档.md" : title.trim();
+        String type = resolveTextDocumentType(normalizedTitle);
+        String fileKey = "docs/" + UUID.randomUUID().toString().replace("-", "") + "." + type;
+        String text = content == null ? "" : content;
+        byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+        String contentType = "text/markdown; charset=utf-8";
+        if ("txt".equalsIgnoreCase(type)) {
+            contentType = "text/plain; charset=utf-8";
+        }
+
+        storageService.uploadFile(fileKey, new ByteArrayInputStream(bytes), contentType);
+
+        Document doc = new Document();
+        doc.setTitle(normalizedTitle);
+        doc.setType(type);
+        doc.setFileSize((long) bytes.length);
+        doc.setFileKey(fileKey);
+        doc.setMd5(hashMd5(text));
+        doc.setFolderId(folderId != null ? folderId : 0L);
+        doc.setWorkspaceId(workspaceId);
+        doc.setCreatorId(creatorId);
+        doc.setVersion(1);
+        doc.setStatus(Constants.DOC_NORMAL);
+        doc.setPermission(Constants.DOC_SPACE_VISIBLE);
+        documentMapper.insert(doc);
+
+        DocumentVersion version = new DocumentVersion();
+        version.setDocumentId(doc.getId());
+        version.setVersion(1);
+        version.setFileKey(fileKey);
+        version.setFileSize((long) bytes.length);
+        version.setRemark("新建文档");
         version.setOperatorId(creatorId);
         versionMapper.insert(version);
 
@@ -109,22 +158,28 @@ public class DocumentServiceImpl implements DocumentService {
             throw new BusinessException(400, "当前文档类型不支持在线编辑");
         }
 
+        String safeType = doc.getType().toLowerCase(Locale.ROOT);
         byte[] bytes = (content == null ? "" : content).getBytes(StandardCharsets.UTF_8);
         String contentType = "text/markdown; charset=utf-8";
-        if ("txt".equalsIgnoreCase(doc.getType())) {
+        if ("txt".equals(safeType)) {
             contentType = "text/plain; charset=utf-8";
         }
 
-        storageService.uploadFile(doc.getFileKey(), new ByteArrayInputStream(bytes), contentType);
+        int newVersion = doc.getVersion() == null ? 1 : doc.getVersion() + 1;
+        // 每次在线编辑生成新的不可变文件对象，保证历史版本内容可追溯、可回滚
+        String newFileKey = "docs/" + doc.getId() + "/v" + newVersion + "." + safeType;
+        storageService.uploadFile(newFileKey, new ByteArrayInputStream(bytes), contentType);
 
+        doc.setFileKey(newFileKey);
         doc.setFileSize((long) bytes.length);
-        doc.setVersion(doc.getVersion() + 1);
+        doc.setMd5(hashMd5(content == null ? "" : content));
+        doc.setVersion(newVersion);
         documentMapper.updateById(doc);
 
         DocumentVersion version = new DocumentVersion();
         version.setDocumentId(docId);
-        version.setVersion(doc.getVersion());
-        version.setFileKey(doc.getFileKey());
+        version.setVersion(newVersion);
+        version.setFileKey(newFileKey);
         version.setFileSize((long) bytes.length);
         version.setRemark("在线文本编辑");
         version.setOperatorId(userId);
@@ -244,5 +299,26 @@ public class DocumentServiceImpl implements DocumentService {
         }
         String normalized = type.toLowerCase();
         return "md".equals(normalized) || "markdown".equals(normalized) || "txt".equals(normalized);
+    }
+
+    private String resolveTextDocumentType(String title) {
+        if (title == null) {
+            return "md";
+        }
+        String lower = title.toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".txt")) {
+            return "txt";
+        }
+        return lower.endsWith(".md") || lower.endsWith(".markdown") ? "md" : "md";
+    }
+
+    private String hashMd5(String content) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("MD5");
+            byte[] bytes = digest.digest(content.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(bytes);
+        } catch (Exception e) {
+            return "";
+        }
     }
 }

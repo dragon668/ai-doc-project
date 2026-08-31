@@ -5,6 +5,7 @@
         <el-icon><ArrowLeft /></el-icon> 返回
       </el-button>
       <div style="display:flex; gap:8px; align-items:center">
+        <el-button @click="handleShowVersions">版本历史</el-button>
         <el-button @click="handleDownload">下载</el-button>
         <el-button type="primary" :disabled="!isTextDoc || isSaving" @click="saveContent">
           {{ isSaving ? '保存中...' : '保存内容' }}
@@ -49,14 +50,29 @@
         <el-button @click="handleDownload" type="primary">下载查看</el-button>
       </div>
     </el-card>
+
+    <!-- 版本历史对话框 -->
+    <el-dialog v-model="showVersionDialog" title="版本历史" width="620px">
+      <el-timeline>
+        <el-timeline-item v-for="ver in versions" :key="ver.id" :timestamp="formatTime(ver.createTime)" placement="top">
+          <el-card>
+            <p>版本 {{ ver.version }} - {{ ver.remark }}</p>
+            <p style="color: #999; font-size: 12px">{{ formatSize(ver.fileSize) }}</p>
+            <el-button size="small" type="primary" :disabled="ver.version === doc?.version" @click="handleRollback(ver)" style="margin-top: 8px">
+              {{ ver.version === doc?.version ? '当前版本' : '回滚到此版本' }}
+            </el-button>
+          </el-card>
+        </el-timeline-item>
+      </el-timeline>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { getDocument, getDownloadUrl, getDocumentContent, updateDocumentContent } from '@/api/document'
-import { ElMessage } from 'element-plus'
+import { getDocument, getDownloadUrl, getDocumentContent, updateDocumentContent, getVersionHistory, rollbackVersion } from '@/api/document'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { MdEditor, MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
 
@@ -68,6 +84,8 @@ const contentMode = ref('edit')
 const previewUrl = ref('')
 const previewKind = ref('')
 const isSaving = ref(false)
+const showVersionDialog = ref(false)
+const versions = ref([])
 
 const isTextDoc = computed(() => {
   const type = (doc.value?.type || '').toLowerCase()
@@ -117,5 +135,45 @@ async function saveContent() {
 async function handleDownload() {
   const res = await getDownloadUrl(docId)
   window.open(res.data, '_blank')
+}
+
+async function handleShowVersions() {
+  try {
+    const res = await getVersionHistory(docId)
+    versions.value = res.data || []
+    showVersionDialog.value = true
+  } catch (error) {
+    ElMessage.error(error?.response?.data?.message || '获取版本历史失败')
+  }
+}
+
+async function handleRollback(ver) {
+  try {
+    await ElMessageBox.confirm(`确认回滚到版本 ${ver.version}？`)
+    await rollbackVersion(docId, ver.version)
+    ElMessage.success('回滚成功')
+    showVersionDialog.value = false
+    // 重新加载文档内容
+    const contentRes = await getDocumentContent(docId)
+    content.value = contentRes.data || ''
+    const docRes = await getDocument(docId)
+    doc.value.type = (docRes.data.type || '').toLowerCase()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error?.response?.data?.message || '回滚失败')
+    }
+  }
+}
+
+function formatTime(t) {
+  return t || ''
+}
+
+function formatSize(bytes) {
+  if (!bytes) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let i = 0, size = bytes
+  while (size >= 1024 && i < units.length - 1) { size /= 1024; i++ }
+  return size.toFixed(1) + ' ' + units[i]
 }
 </script>

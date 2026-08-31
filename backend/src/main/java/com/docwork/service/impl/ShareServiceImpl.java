@@ -7,10 +7,14 @@ import com.docwork.entity.ShareLink;
 import com.docwork.mapper.DocumentMapper;
 import com.docwork.mapper.ShareLinkMapper;
 import com.docwork.service.ShareService;
+import com.docwork.service.StorageService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.Locale;
 import java.util.UUID;
 
 @Service
@@ -19,6 +23,7 @@ public class ShareServiceImpl implements ShareService {
 
     private final ShareLinkMapper shareLinkMapper;
     private final DocumentMapper documentMapper;
+    private final StorageService storageService;
 
     @Override
     public ShareLink createShareLink(Long documentId, Long creatorId, int expireHours, String password, int permission) {
@@ -89,5 +94,47 @@ public class ShareServiceImpl implements ShareService {
             throw new BusinessException(403, "只能删除自己创建的分享链接");
         }
         shareLinkMapper.deleteById(link.getId());
+    }
+
+    @Override
+    public Document getSharedDocument(String code, String password) {
+        ShareLink link = resolveAndVerify(code, password);
+        Document doc = documentMapper.selectById(link.getDocumentId());
+        if (doc == null || Integer.valueOf(1).equals(doc.getDeleted())) {
+            throw new BusinessException(404, "共享文档不存在");
+        }
+        return doc;
+    }
+
+    @Override
+    public String getSharedDocumentContent(String code, String password) {
+        Document doc = getSharedDocument(code, password);
+        if (doc.getType() == null) {
+            throw new BusinessException(400, "当前文档类型不支持文本内容读取");
+        }
+        String type = doc.getType().toLowerCase(Locale.ROOT);
+        if (!"md".equals(type) && !"markdown".equals(type) && !"txt".equals(type)) {
+            throw new BusinessException(400, "当前文档类型不支持在线文本预览");
+        }
+        try (InputStream inputStream = storageService.downloadFile(doc.getFileKey())) {
+            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BusinessException(500, "读取共享文档内容失败: " + e.getMessage());
+        }
+    }
+
+    private ShareLink resolveAndVerify(String code, String password) {
+        ShareLink link = getShareByCode(code);
+        if (link.getPassword() != null && !link.getPassword().isEmpty()) {
+            if (password == null || !link.getPassword().equals(password)) {
+                throw new BusinessException(403, "提取码错误");
+            }
+        }
+        // 只读访问，累计查看次数
+        link.setViewCount(link.getViewCount() + 1);
+        shareLinkMapper.updateById(link);
+        return link;
     }
 }

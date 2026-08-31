@@ -12,6 +12,9 @@ public interface DocumentService {
     Document createDocument(String title, String type, long fileSize, String fileKey,
                            String md5, Long folderId, Long workspaceId, Long creatorId);
 
+    /** 创建空白文本文档并写入初始内容 */
+    Document createTextDocument(String title, String content, Long workspaceId, Long folderId, Long creatorId);
+
     /** 获取空间下的文档列表 */
     Page<Document> listDocuments(Long workspaceId, Long folderId, int page, int size, Long userId);
 
