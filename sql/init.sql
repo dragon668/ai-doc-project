@@ -215,8 +215,8 @@ CREATE TABLE IF NOT EXISTS `operation_log` (
 -- 测试用户 (密码均为: 123456, BCrypt加密)
 INSERT INTO `user` (`username`, `password`, `nickname`, `email`, `used_storage`, `total_storage`, `status`)
 VALUES
-('admin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '管理员', 'admin@docwork.com', 0, 10737418240, 1),
-('testuser', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', '测试用户', 'test@docwork.com', 0, 10737418240, 1);
+('admin', '$2a$10$l4s4Op2OTBJGnag7FhvCnuwhh8GiE8/OV3r5wqgTfhaUh0HxWGy0.', '管理员', 'admin@docwork.com', 0, 10737418240, 1),
+('testuser', '$2a$10$l4s4Op2OTBJGnag7FhvCnuwhh8GiE8/OV3r5wqgTfhaUh0HxWGy0.', '测试用户', 'test@docwork.com', 0, 10737418240, 1);
 
 -- 管理员的个人空间
 INSERT INTO `workspace` (`name`, `description`, `owner_id`, `type`)
