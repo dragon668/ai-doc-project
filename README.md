@@ -325,6 +325,10 @@ docker-compose up -d mysql redis minio rocketmq-namesrv rocketmq-broker
 cd backend
 ./mvnw clean package
 java -jar target/*.jar
+
+cd C:\Users\21021\Desktop\creat\ai_wendang\backend
+.\mvnw.cmd clean package
+java -jar target\ai-doc-workspace-1.0.0.jar
 ```
 
 3. 启动 AI 服务：
@@ -332,8 +336,9 @@ java -jar target/*.jar
 ```bash
 cd ai-service
 pip install -r requirements.txt
-export OPENAI_API_KEY="your-key"
-uvicorn main:app --host 0.0.0.0 --port 8000
+# PowerShell
+$env:OPENAI_API_KEY = "your-api-key"
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 4. 启动前端：
@@ -348,7 +353,11 @@ npm run dev
 
 - 前端： http://localhost:5173
 - 后端： http://localhost:8080
-- AI 服务： http://localhost:8000/docs
+- AI 服务（本地开发调试）： http://localhost:8000/docs
+
+说明：浏览器不直接调用 AI 服务。开发环境中前端请求先到 Vite，再由 Java 后端转发到本机 `8000`；Compose 部署时 AI 服务仅在 Docker 内网提供给后端访问，不发布 `8000` 到宿主机。
+
+AI 接口配置在网页保存后由后端使用 AES-GCM 加密存储，列表接口只返回脱敏 Key。聊天消息也由后端加密保存，浏览器只接收当前会话所需内容。
 
 ### 7.2 运行现状判断
 

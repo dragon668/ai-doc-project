@@ -20,6 +20,9 @@ class ChatRequest(BaseModel):
     workspace_id: int = 1
     history: List[dict] = []
     doc_ids: Optional[List[int]] = None
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    model: Optional[str] = None
 
 
 @router.post("/chat")
@@ -32,7 +35,10 @@ async def chat(request: ChatRequest):
                 workspace_id=request.workspace_id,
                 question=request.question,
                 history=request.history,
-                doc_ids=request.doc_ids
+                doc_ids=request.doc_ids,
+                api_key=request.api_key,
+                base_url=request.base_url,
+                model=request.model
             ):
                 yield f"data: {chunk}\n\n"
             yield "data: [DONE]\n\n"

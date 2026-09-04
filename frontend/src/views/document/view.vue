@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div ref="documentPage" class="document-page">
     <div style="margin-bottom: 16px; display:flex; justify-content:space-between; align-items:center">
       <el-button @click="$router.back()" text>
         <el-icon><ArrowLeft /></el-icon> 返回
@@ -7,6 +7,18 @@
       <div style="display:flex; gap:8px; align-items:center">
         <el-button @click="handleShowVersions">版本历史</el-button>
         <el-button @click="handleDownload">下载</el-button>
+        <el-dropdown v-if="isTextDoc" @command="exportContent">
+          <el-button>导出</el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="md">Markdown</el-dropdown-item>
+              <el-dropdown-item command="txt">纯文本</el-dropdown-item>
+              <el-dropdown-item command="html">HTML</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <el-button v-if="isTextDoc" @click="showCanvas = true">无限画布</el-button>
+        <el-button @click="toggleFullscreen">全屏预览</el-button>
         <el-button type="primary" :disabled="!isTextDoc || isSaving" @click="saveContent">
           {{ isSaving ? '保存中...' : '保存内容' }}
         </el-button>
@@ -28,7 +40,7 @@
         <div v-if="contentMode === 'edit'" style="min-height: 420px">
           <MdEditor v-model="content" :toolbarsExclude="['save', 'github']" style="height: 480px" />
         </div>
-        <div v-else style="min-height: 420px; background:#fafafa; padding:16px; border-radius:8px; border:1px solid #eee; overflow:auto">
+        <div v-else class="preview-surface">
           <MdPreview :modelValue="content || '暂无内容'" />
         </div>
       </div>
@@ -50,6 +62,10 @@
         <el-button @click="handleDownload" type="primary">下载查看</el-button>
       </div>
     </el-card>
+
+    <el-dialog v-model="showCanvas" title="无限画布" fullscreen destroy-on-close>
+      <InfiniteCanvas @insert="insertCanvas" />
+    </el-dialog>
 
     <!-- 版本历史对话框 -->
     <el-dialog v-model="showVersionDialog" title="版本历史" width="620px">
@@ -75,6 +91,7 @@ import { getDocument, getDownloadUrl, getDocumentContent, updateDocumentContent,
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { MdEditor, MdPreview } from 'md-editor-v3'
 import 'md-editor-v3/lib/style.css'
+import InfiniteCanvas from '@/components/document/InfiniteCanvas.vue'
 
 const route = useRoute()
 const docId = route.params.id
@@ -86,6 +103,8 @@ const previewKind = ref('')
 const isSaving = ref(false)
 const showVersionDialog = ref(false)
 const versions = ref([])
+const showCanvas = ref(false)
+const documentPage = ref(null)
 
 const isTextDoc = computed(() => {
   const type = (doc.value?.type || '').toLowerCase()
@@ -130,6 +149,35 @@ async function saveContent() {
   } finally {
     isSaving.value = false
   }
+}
+
+function exportContent(format) {
+  const baseName = (doc.value?.title || 'document').replace(/\.[^.]+$/, '')
+  const payload = format === 'html'
+    ? `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>${escapeHtml(baseName)}</title><body><pre>${escapeHtml(content.value)}</pre></body></html>`
+    : content.value
+  const mime = format === 'html' ? 'text/html;charset=utf-8' : format === 'md' ? 'text/markdown;charset=utf-8' : 'text/plain;charset=utf-8'
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(new Blob([payload], { type: mime }))
+  link.download = `${baseName}.${format}`
+  link.click()
+  URL.revokeObjectURL(link.href)
+  ElMessage.success(`已导出 ${format.toUpperCase()} 文件`)
+}
+
+function escapeHtml(value) {
+  return value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]))
+}
+
+function toggleFullscreen() {
+  if (!document.fullscreenElement) documentPage.value?.requestFullscreen()
+  else document.exitFullscreen()
+}
+
+function insertCanvas(dataUrl) {
+  content.value += `${content.value ? '\n\n' : ''}![画布](${dataUrl})`
+  showCanvas.value = false
+  contentMode.value = 'edit'
 }
 
 async function handleDownload() {
@@ -177,3 +225,9 @@ function formatSize(bytes) {
   return size.toFixed(1) + ' ' + units[i]
 }
 </script>
+
+<style scoped>
+.document-page { min-height: 100%; }
+.preview-surface { min-height: 420px; background: #fafafa; padding: 16px; border-radius: 8px; border: 1px solid #eee; overflow: auto; }
+.document-page:fullscreen { padding: 24px; overflow: auto; background: #f5f7fa; }
+</style>

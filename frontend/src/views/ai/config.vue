@@ -39,6 +39,7 @@ import { ElMessage } from 'element-plus'
 import { listAiConfig, saveAiConfig } from '@/api/aiConfig'
 
 const form = ref({
+  id: null,
   provider: 'openai',
   apiKey: '',
   baseUrl: 'https://api.openai.com/v1',
@@ -51,6 +52,7 @@ onMounted(async () => {
   if (res.data && res.data.length) {
     const cfg = res.data[0]
     form.value = {
+      id: cfg.id || null,
       provider: cfg.provider || 'openai',
       apiKey: cfg.apiKey || '',
       baseUrl: cfg.baseUrl || 'https://api.openai.com/v1',
@@ -61,7 +63,7 @@ onMounted(async () => {
 })
 
 async function saveConfig() {
-  await saveAiConfig(form.value)
+  await saveAiConfig({ ...form.value })
   ElMessage.success('保存成功')
 }
 </script>

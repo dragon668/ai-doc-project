@@ -11,3 +11,11 @@ export function searchUsers(keyword) {
 export function addFriend(friendId) {
   return request.post('/friend/add', { friendId })
 }
+
+export function listFriendRequests() {
+  return request.get('/friend/requests')
+}
+
+export function approveFriendRequest(requestId) {
+  return request.post(`/friend/requests/${requestId}/approve`)
+}

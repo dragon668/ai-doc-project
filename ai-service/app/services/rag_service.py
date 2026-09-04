@@ -43,12 +43,13 @@ def split_text(text: str) -> List[str]:
     return text_splitter.split_text(text)
 
 
-def get_embeddings(texts: List[str]) -> np.ndarray:
+def get_embeddings(texts: List[str], api_key: Optional[str] = None,
+                   base_url: Optional[str] = None, model: Optional[str] = None) -> np.ndarray:
     """调用OpenAI API获取文本向量"""
     import httpx
 
     headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Authorization": f"Bearer {api_key or OPENAI_API_KEY}",
         "Content-Type": "application/json"
     }
 
@@ -58,12 +59,12 @@ def get_embeddings(texts: List[str]) -> np.ndarray:
     for i in range(0, len(texts), batch_size):
         batch = texts[i:i + batch_size]
         payload = {
-            "model": EMBEDDING_MODEL,
+            "model": model or EMBEDDING_MODEL,
             "input": batch
         }
 
         response = httpx.post(
-            f"{OPENAI_BASE_URL}/embeddings",
+            f"{(base_url or OPENAI_BASE_URL).rstrip('/')}/embeddings",
             json=payload,
             headers=headers,
             timeout=60.0
@@ -126,12 +127,13 @@ async def vectorize_document(workspace_id: int, doc_id: int, file_path: str, doc
 
 async def rag_search_and_answer(workspace_id: int, question: str,
                                  history: List[dict], doc_ids: Optional[List[int]] = None,
-                                 top_k: int = 5):
+                                 top_k: int = 5, api_key: Optional[str] = None,
+                                 base_url: Optional[str] = None, model: Optional[str] = None):
     """RAG检索增强问答 - 生成器，用于SSE流式输出"""
     import httpx
 
     # 1. 获取问题的向量
-    query_vector = get_embeddings([question])
+    query_vector = get_embeddings([question], api_key, base_url)
 
     # 2. 在向量库中检索
     search_results = vector_store.search(workspace_id, query_vector, top_k=top_k)
@@ -173,7 +175,7 @@ async def rag_search_and_answer(workspace_id: int, question: str,
     }
 
     payload = {
-        "model": CHAT_MODEL,
+        "model": model or CHAT_MODEL,
         "messages": messages,
         "stream": True,
         "temperature": 0.7,
@@ -183,7 +185,7 @@ async def rag_search_and_answer(workspace_id: int, question: str,
     async with httpx.AsyncClient(timeout=120.0) as client:
         async with client.stream(
             "POST",
-            f"{OPENAI_BASE_URL}/chat/completions",
+            f"{(base_url or OPENAI_BASE_URL).rstrip('/')}/chat/completions",
             json=payload,
             headers=headers
         ) as response:

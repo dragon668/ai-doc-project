@@ -23,6 +23,15 @@
           <div v-else style="color:#999">暂无搜索结果</div>
         </el-card>
       </el-col>
+      <el-col :span="24" style="margin-top: 20px" v-if="requests.length">
+        <el-card>
+          <template #header>好友申请</template>
+          <div v-for="item in requests" :key="item.id" style="display:flex;justify-content:space-between;padding:8px 0">
+            <span>{{ item.nickname || item.username }} 请求添加你为好友</span>
+            <el-button size="small" type="primary" @click="approve(item.id)">同意</el-button>
+          </div>
+        </el-card>
+      </el-col>
       <el-col :span="12">
         <el-card>
           <template #header>我的好友</template>
@@ -41,20 +50,27 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { listFriends, searchUsers, addFriend } from '@/api/friend'
+import { listFriends, searchUsers, addFriend, listFriendRequests, approveFriendRequest } from '@/api/friend'
 import { ElMessage } from 'element-plus'
 
 const friends = ref([])
+const requests = ref([])
 const searchResults = ref([])
 const keyword = ref('')
 
 onMounted(async () => {
   await loadFriends()
+  await loadRequests()
 })
 
 async function loadFriends() {
   const res = await listFriends()
   friends.value = res.data || []
+}
+
+async function loadRequests() {
+  const res = await listFriendRequests()
+  requests.value = res.data || []
 }
 
 async function search() {
@@ -65,7 +81,12 @@ async function search() {
 
 async function handleAdd(friendId) {
   await addFriend(friendId)
-  ElMessage.success('添加好友成功')
-  await loadFriends()
+  ElMessage.success('好友申请已发送')
+}
+
+async function approve(requestId) {
+  await approveFriendRequest(requestId)
+  ElMessage.success('已同意好友申请')
+  await Promise.all([loadFriends(), loadRequests()])
 }
 </script>

@@ -2,12 +2,14 @@ package com.docwork.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.docwork.common.BusinessException;
+import com.docwork.common.SecretCryptoService;
 import com.docwork.entity.AiConversation;
 import com.docwork.entity.AiMessage;
 import com.docwork.entity.Document;
 import com.docwork.mapper.AiConversationMapper;
 import com.docwork.mapper.AiMessageMapper;
 import com.docwork.mapper.DocumentMapper;
+import com.docwork.mapper.AiApiConfigMapper;
 import com.docwork.service.AiService;
 import com.docwork.common.Constants;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,6 +37,8 @@ public class AiServiceImpl implements AiService {
     private final AiConversationMapper conversationMapper;
     private final AiMessageMapper messageMapper;
     private final DocumentMapper documentMapper;
+    private final AiApiConfigMapper aiApiConfigMapper;
+    private final SecretCryptoService secretCryptoService;
     private final ObjectMapper objectMapper;
 
     @Value("${ai-service.url}")
@@ -88,7 +92,7 @@ public class AiServiceImpl implements AiService {
         AiMessage userMsg = new AiMessage();
         userMsg.setConversationId(conversationId);
         userMsg.setRole("user");
-        userMsg.setContent(question);
+        userMsg.setContent(secretCryptoService.encrypt(question));
         messageMapper.insert(userMsg);
 
         // 获取历史消息(最近10轮)
@@ -98,6 +102,7 @@ public class AiServiceImpl implements AiService {
                         .orderByDesc(AiMessage::getCreateTime)
                         .last("LIMIT 20")
         );
+                history.forEach(message -> message.setContent(secretCryptoService.decrypt(message.getContent())));
 
         // 获取空间中已向量化文档列表(作为知识库范围)
         List<Document> docs = documentMapper.selectList(
@@ -115,8 +120,12 @@ public class AiServiceImpl implements AiService {
                 // 构造请求体
                 Map<String, Object> requestBody = Map.of(
                         "question", question,
+                    "workspace_id", conv.getWorkspaceId(),
                         "history", history.stream().map(m -> Map.of("role", m.getRole(), "content", m.getContent())).toList(),
-                        "doc_ids", docs.stream().map(Document::getId).toList()
+                    "doc_ids", docs.stream().map(Document::getId).toList(),
+                    "api_key", getApiKey(userId),
+                    "base_url", getBaseUrl(userId),
+                    "model", getModel(userId)
                 );
 
                 String jsonBody = objectMapper.writeValueAsString(requestBody);
@@ -151,7 +160,7 @@ public class AiServiceImpl implements AiService {
                 AiMessage aiMsg = new AiMessage();
                 aiMsg.setConversationId(conversationId);
                 aiMsg.setRole("assistant");
-                aiMsg.setContent(fullResponse.toString());
+                aiMsg.setContent(secretCryptoService.encrypt(fullResponse.toString()));
                 messageMapper.insert(aiMsg);
 
                 emitter.complete();
@@ -173,16 +182,40 @@ public class AiServiceImpl implements AiService {
         return emitter;
     }
 
+    private com.docwork.entity.AiApiConfig getConfig(Long userId) {
+        return aiApiConfigMapper.selectOne(new LambdaQueryWrapper<com.docwork.entity.AiApiConfig>()
+                .eq(com.docwork.entity.AiApiConfig::getUserId, userId)
+                .orderByDesc(com.docwork.entity.AiApiConfig::getIsDefault)
+                .last("LIMIT 1"));
+    }
+
+    private String getApiKey(Long userId) {
+        var config = getConfig(userId);
+        return config == null ? "" : secretCryptoService.decrypt(config.getApiKey());
+    }
+
+    private String getBaseUrl(Long userId) {
+        var config = getConfig(userId);
+        return config == null ? "" : config.getBaseUrl();
+    }
+
+    private String getModel(Long userId) {
+        var config = getConfig(userId);
+        return config == null ? "" : config.getModelName();
+    }
+
     @Override
     public List<AiMessage> getMessages(Long conversationId, Long userId) {
         AiConversation conv = conversationMapper.selectById(conversationId);
         if (conv == null || !conv.getUserId().equals(userId)) {
             throw new BusinessException(403, "无权查看此对话");
         }
-        return messageMapper.selectList(
+        List<AiMessage> messages = messageMapper.selectList(
                 new LambdaQueryWrapper<AiMessage>()
                         .eq(AiMessage::getConversationId, conversationId)
                         .orderByAsc(AiMessage::getCreateTime)
         );
+        messages.forEach(message -> message.setContent(secretCryptoService.decrypt(message.getContent())));
+        return messages;
     }
 }
