@@ -191,7 +191,7 @@ public class AiServiceImpl implements AiService {
 
     private String getApiKey(Long userId) {
         var config = getConfig(userId);
-        return config == null ? "" : secretCryptoService.decrypt(config.getApiKey());
+        return config == null ? "" : secretCryptoService.decryptApiKey(config.getApiKey());
     }
 
     private String getBaseUrl(Long userId) {

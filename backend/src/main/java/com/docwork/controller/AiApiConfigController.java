@@ -35,7 +35,7 @@ public class AiApiConfigController {
             item.put("baseUrl", config.getBaseUrl());
             item.put("modelName", config.getModelName());
             item.put("isDefault", config.getIsDefault());
-            String key = secretCryptoService.decrypt(config.getApiKey());
+            String key = secretCryptoService.decryptApiKey(config.getApiKey());
             item.put("apiKey", key.isBlank() ? "" : key.substring(0, Math.min(4, key.length())) + "****");
             result.add(item);
         }

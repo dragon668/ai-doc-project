@@ -10,6 +10,11 @@ import com.docwork.common.Constants;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 public class DashboardServiceImpl implements DashboardService {
@@ -18,6 +23,8 @@ public class DashboardServiceImpl implements DashboardService {
     private final ShareLinkMapper shareLinkMapper;
     private final AiConversationMapper conversationMapper;
     private final UserMapper userMapper;
+        private final com.docwork.mapper.DocumentVersionMapper versionMapper;
+        private final com.docwork.mapper.OperationLogMapper operationLogMapper;
 
     @Override
     public DashboardVO getDashboardData(Long userId) {
@@ -62,6 +69,25 @@ public class DashboardServiceImpl implements DashboardService {
                         .eq(AiConversation::getDeleted, 0)
         );
 
+        LocalDateTime activityStart = LocalDate.now().minusDays(364).atStartOfDay();
+        long editCount = versionMapper.selectCount(new LambdaQueryWrapper<DocumentVersion>()
+                .eq(DocumentVersion::getOperatorId, userId)
+                .ge(DocumentVersion::getCreateTime, activityStart));
+        long loggedContributions = operationLogMapper.selectCount(new LambdaQueryWrapper<OperationLog>()
+                .eq(OperationLog::getUserId, userId)
+                .ge(OperationLog::getCreateTime, activityStart));
+        List<OperationLog> logs = operationLogMapper.selectList(new LambdaQueryWrapper<OperationLog>()
+                .eq(OperationLog::getUserId, userId)
+                .ge(OperationLog::getCreateTime, activityStart));
+        List<Integer> activity = new ArrayList<>();
+        for (int day = 364; day >= 0; day--) {
+            LocalDate date = LocalDate.now().minusDays(day);
+            int count = (int) logs.stream().filter(log -> log.getCreateTime() != null && log.getCreateTime().toLocalDate().equals(date)).count();
+            activity.add(count);
+        }
+        long contributionCount = editCount + loggedContributions;
+        long activeDays = activity.stream().filter(count -> count > 0).count();
+
         if (user == null) {
             throw new BusinessException(404, "用户不存在");
         }
@@ -74,6 +100,10 @@ public class DashboardServiceImpl implements DashboardService {
         vo.setParsingDocs(parsingDocs);
         vo.setSharedLinks(sharedLinks);
         vo.setTotalConversations(totalConversations);
+        vo.setEditCount(editCount);
+        vo.setContributionCount(contributionCount);
+        vo.setActiveDays(activeDays);
+        vo.setActivity(activity);
 
         return vo;
     }

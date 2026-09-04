@@ -146,7 +146,8 @@ async def rag_search_and_answer(workspace_id: int, question: str,
     # 3. 构建上下文
     context_parts = []
     reference_docs = []
-    for meta, score in search_results:
+    for result in search_results:
+        meta = result[0]
         context_parts.append(f"[文档: {meta.get('doc_title', '未知')}] {meta.get('content', '')}")
         if meta.get("doc_id") not in reference_docs:
             reference_docs.append({"doc_id": meta.get("doc_id"), "title": meta.get("doc_title")})
@@ -170,7 +171,7 @@ async def rag_search_and_answer(workspace_id: int, question: str,
 
     # 5. 调用大模型流式生成
     headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Authorization": f"Bearer {api_key or OPENAI_API_KEY}",
         "Content-Type": "application/json"
     }
 

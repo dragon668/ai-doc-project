@@ -24,8 +24,12 @@ public interface DocumentService {
     /** 获取文档文本内容（Markdown/TXT） */
     String getDocumentContent(Long docId);
 
+    String getEditableContent(Long docId);
+
     /** 保存文档文本内容（Markdown/TXT） */
     void updateDocumentContent(Long docId, String content, Long userId);
+
+    void updateEditableContent(Long docId, String content, Long userId);
 
     /** 删除文档(逻辑删除) */
     void deleteDocument(Long docId, Long userId);

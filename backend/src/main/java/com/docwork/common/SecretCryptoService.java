@@ -62,4 +62,13 @@ public class SecretCryptoService {
             throw new IllegalStateException("配置解密失败", e);
         }
     }
+
+    public String decryptApiKey(String value) {
+        if (value == null || value.isBlank()) return "";
+        try {
+            return decrypt(value);
+        } catch (IllegalStateException e) {
+            return value;
+        }
+    }
 }

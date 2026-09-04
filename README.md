@@ -341,6 +341,8 @@ $env:OPENAI_API_KEY = "your-api-key"
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
+注意：必须在 `ai-service` 目录中执行 `uvicorn`，因为 Python 包入口位于 `ai-service/app`。如果当前终端在仓库根目录，请先执行 `cd ai-service`。
+
 4. 启动前端：
 
 ```bash
@@ -357,7 +359,7 @@ npm run dev
 
 说明：浏览器不直接调用 AI 服务。开发环境中前端请求先到 Vite，再由 Java 后端转发到本机 `8000`；Compose 部署时 AI 服务仅在 Docker 内网提供给后端访问，不发布 `8000` 到宿主机。
 
-AI 接口配置在网页保存后由后端使用 AES-GCM 加密存储，列表接口只返回脱敏 Key。聊天消息也由后端加密保存，浏览器只接收当前会话所需内容。
+AI 接口配置在网页保存后由后端使用 AES-GCM 加密存储，列表接口只返回脱敏 Key。聊天消息也由后端加密保存，浏览器只接收当前会话所需内容。文档页的画布使用矢量笔画和文字记录，导出默认按内容边界裁剪，也支持自定义 `x,y,width,height` 裁剪；插入文档时使用 SVG，而不是把整张 PNG 的像素编码成超长 Markdown data URL。
 
 ### 7.2 运行现状判断
 

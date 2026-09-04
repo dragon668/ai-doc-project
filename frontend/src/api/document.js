@@ -16,8 +16,16 @@ export function getDocumentContent(id) {
   return request.get(`/doc/${id}/content`)
 }
 
+export function getEditableContent(id) {
+  return request.get(`/doc/${id}/editable-content`)
+}
+
 export function updateDocumentContent(id, content) {
   return request.post(`/doc/${id}/content`, { content })
+}
+
+export function updateEditableContent(id, content) {
+  return request.post(`/doc/${id}/editable-content`, { content })
 }
 
 export function deleteDocument(id) {

@@ -48,22 +48,30 @@ const form = ref({
 })
 
 onMounted(async () => {
-  const res = await listAiConfig()
-  if (res.data && res.data.length) {
-    const cfg = res.data[0]
-    form.value = {
-      id: cfg.id || null,
-      provider: cfg.provider || 'openai',
-      apiKey: cfg.apiKey || '',
-      baseUrl: cfg.baseUrl || 'https://api.openai.com/v1',
-      modelName: cfg.modelName || 'gpt-4o-mini',
-      isDefault: cfg.isDefault || 0
+  try {
+    const res = await listAiConfig()
+    if (res.data && res.data.length) {
+      const cfg = res.data[0]
+      form.value = {
+        id: cfg.id || null,
+        provider: cfg.provider || 'openai',
+        apiKey: cfg.apiKey || '',
+        baseUrl: cfg.baseUrl || 'https://api.openai.com/v1',
+        modelName: cfg.modelName || 'gpt-4o-mini',
+        isDefault: cfg.isDefault || 0
+      }
     }
+  } catch (error) {
+    console.error('[AI CONFIG LOAD ERROR]', error)
   }
 })
 
 async function saveConfig() {
-  await saveAiConfig({ ...form.value })
-  ElMessage.success('保存成功')
+  try {
+    await saveAiConfig({ ...form.value })
+    ElMessage.success('保存成功')
+  } catch (error) {
+    console.error('[AI CONFIG SAVE ERROR]', error)
+  }
 }
 </script>

@@ -142,11 +142,23 @@ public class DocumentController {
         return Result.success(documentService.getDocumentContent(docId));
     }
 
+    @GetMapping("/{docId}/editable-content")
+    public Result<String> getEditableContent(@PathVariable Long docId) {
+        return Result.success(documentService.getEditableContent(docId));
+    }
+
     /** 保存文本文档内容 */
     @PostMapping("/{docId}/content")
     public Result<Void> updateDocumentContent(@PathVariable Long docId, @RequestBody java.util.Map<String, String> body) {
         Long userId = UserContext.getCurrentUserId();
         documentService.updateDocumentContent(docId, body.getOrDefault("content", ""), userId);
+        return Result.success();
+    }
+
+    @PostMapping("/{docId}/editable-content")
+    public Result<Void> updateEditableContent(@PathVariable Long docId, @RequestBody java.util.Map<String, String> body) {
+        Long userId = UserContext.getCurrentUserId();
+        documentService.updateEditableContent(docId, body.getOrDefault("content", ""), userId);
         return Result.success();
     }
 

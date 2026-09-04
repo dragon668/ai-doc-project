@@ -3,9 +3,13 @@ package com.docwork.controller;
 import com.docwork.common.Result;
 import com.docwork.entity.User;
 import com.docwork.entity.UserFriend;
+import com.docwork.entity.ChatMessage;
+import com.docwork.common.BusinessException;
 import com.docwork.interceptor.UserContext;
 import com.docwork.mapper.UserMapper;
 import com.docwork.mapper.UserFriendMapper;
+import com.docwork.mapper.ChatMessageMapper;
+import com.docwork.common.SecretCryptoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -22,6 +26,8 @@ public class UserFriendController {
 
     private final UserFriendMapper userFriendMapper;
     private final UserMapper userMapper;
+    private final ChatMessageMapper chatMessageMapper;
+    private final SecretCryptoService secretCryptoService;
 
     @GetMapping("/list")
     public Result<List<Map<String, Object>>> listFriends() {
@@ -115,6 +121,62 @@ public class UserFriendController {
             userFriendMapper.updateById(outgoing);
         }
         return Result.success();
+    }
+
+    @GetMapping("/chat/{friendId}")
+    public Result<List<Map<String, Object>>> listChatMessages(@PathVariable Long friendId) {
+        Long userId = UserContext.getCurrentUserId();
+        ensureFriends(userId, friendId);
+        List<ChatMessage> messages = chatMessageMapper.selectList(new LambdaQueryWrapper<ChatMessage>()
+                .and(wrapper -> wrapper
+                        .and(pair -> pair.eq(ChatMessage::getSenderId, userId).eq(ChatMessage::getReceiverId, friendId))
+                        .or(pair -> pair.eq(ChatMessage::getSenderId, friendId).eq(ChatMessage::getReceiverId, userId)))
+                .orderByAsc(ChatMessage::getCreateTime));
+        List<Map<String, Object>> result = new java.util.ArrayList<>();
+        for (ChatMessage message : messages) {
+            Map<String, Object> item = new HashMap<>();
+            item.put("id", message.getId());
+            item.put("senderId", message.getSenderId());
+            item.put("receiverId", message.getReceiverId());
+            item.put("content", secretCryptoService.decrypt(message.getContent()));
+            item.put("createTime", message.getCreateTime());
+            result.add(item);
+        }
+        return Result.success(result);
+    }
+
+    @PostMapping("/chat/{friendId}")
+    public Result<Map<String, Object>> sendChatMessage(@PathVariable Long friendId, @RequestBody Map<String, Object> body) {
+        Long userId = UserContext.getCurrentUserId();
+        ensureFriends(userId, friendId);
+        String content = String.valueOf(body.getOrDefault("content", "")).trim();
+        if (content.isBlank()) throw new BusinessException(400, "消息内容不能为空");
+        if (content.length() > 5000) throw new BusinessException(400, "消息不能超过 5000 个字符");
+        ChatMessage message = new ChatMessage();
+        message.setSenderId(userId);
+        message.setReceiverId(friendId);
+        message.setContent(secretCryptoService.encrypt(content));
+        chatMessageMapper.insert(message);
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", message.getId());
+        result.put("senderId", userId);
+        result.put("receiverId", friendId);
+        result.put("content", content);
+        result.put("createTime", message.getCreateTime());
+        return Result.success(result);
+    }
+
+    private void ensureFriends(Long userId, Long friendId) {
+        if (userId.equals(friendId)) throw new BusinessException(400, "不能与自己聊天");
+        boolean connected = userFriendMapper.selectCount(new LambdaQueryWrapper<UserFriend>()
+                .eq(UserFriend::getUserId, userId)
+                .eq(UserFriend::getFriendId, friendId)
+                .eq(UserFriend::getStatus, 1)) > 0
+                && userFriendMapper.selectCount(new LambdaQueryWrapper<UserFriend>()
+                .eq(UserFriend::getUserId, friendId)
+                .eq(UserFriend::getFriendId, userId)
+                .eq(UserFriend::getStatus, 1)) > 0;
+        if (!connected) throw new BusinessException(403, "同意好友申请后才能聊天");
     }
 
     @GetMapping("/search")

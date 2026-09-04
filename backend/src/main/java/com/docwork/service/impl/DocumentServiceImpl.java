@@ -16,6 +16,24 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.xslf.usermodel.XMLSlideShow;
+import org.apache.poi.xslf.usermodel.XSLFShape;
+import org.apache.poi.xslf.usermodel.XSLFSlide;
+import org.apache.poi.xslf.usermodel.XSLFTextShape;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.apache.poi.xwpf.usermodel.XWPFParagraph;
+import org.apache.poi.hwpf.HWPFDocument;
+import org.apache.poi.hslf.usermodel.HSLFSlideShow;
+import org.apache.poi.hslf.usermodel.HSLFShape;
+import org.apache.poi.hslf.usermodel.HSLFSlide;
+import org.apache.poi.hslf.usermodel.HSLFTextShape;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -147,6 +165,20 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
+    public String getEditableContent(Long docId) {
+        Document doc = getDocument(docId);
+        String type = doc.getType() == null ? "" : doc.getType().toLowerCase(Locale.ROOT);
+        try (InputStream inputStream = storageService.downloadFile(doc.getFileKey())) {
+            byte[] bytes = inputStream.readAllBytes();
+            if (isTextDocument(type)) return new String(bytes, StandardCharsets.UTF_8);
+            return extractEditableText(type, bytes);
+        } catch (Exception e) {
+            log.error("读取可编辑内容失败: docId={}", docId, e);
+            throw new BusinessException(500, "文档解析失败，请确认文件内容未损坏");
+        }
+    }
+
+    @Override
     @Transactional
     public void updateDocumentContent(Long docId, String content, Long userId) {
         Document doc = getDocument(docId);
@@ -184,6 +216,101 @@ public class DocumentServiceImpl implements DocumentService {
         version.setRemark("在线文本编辑");
         version.setOperatorId(userId);
         versionMapper.insert(version);
+    }
+
+    @Override
+    @Transactional
+    public void updateEditableContent(Long docId, String content, Long userId) {
+        Document doc = getDocument(docId);
+        int role = checkDocPermission(docId, userId);
+        if (role > Constants.ROLE_EDITOR) {
+            throw new BusinessException(403, "无权编辑此文档");
+        }
+        String text = content == null ? "" : content;
+        int newVersion = doc.getVersion() == null ? 1 : doc.getVersion() + 1;
+        byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+        String newFileKey = "docs/" + doc.getId() + "/v" + newVersion + ".md";
+        storageService.uploadFile(newFileKey, new ByteArrayInputStream(bytes), "text/markdown; charset=utf-8");
+        doc.setFileKey(newFileKey);
+        doc.setFileSize((long) bytes.length);
+        doc.setMd5(hashMd5(text));
+        doc.setType("md");
+        doc.setVersion(newVersion);
+        documentMapper.updateById(doc);
+
+        DocumentVersion version = new DocumentVersion();
+        version.setDocumentId(docId);
+        version.setVersion(newVersion);
+        version.setFileKey(newFileKey);
+        version.setFileSize((long) bytes.length);
+        version.setRemark("转换为在线编辑稿");
+        version.setOperatorId(userId);
+        versionMapper.insert(version);
+    }
+
+    private String extractEditableText(String type, byte[] bytes) throws Exception {
+        if ("pdf".equals(type)) {
+            try (var pdf = Loader.loadPDF(bytes)) {
+                return new PDFTextStripper().getText(pdf);
+            }
+        }
+        if ("docx".equals(type)) {
+            try (XWPFDocument document = new XWPFDocument(new ByteArrayInputStream(bytes))) {
+                return document.getParagraphs().stream().map(XWPFParagraph::getText)
+                        .filter(text -> !text.isBlank()).reduce((left, right) -> left + "\n\n" + right).orElse("");
+            }
+        }
+        if ("doc".equals(type)) {
+            try (HWPFDocument document = new HWPFDocument(new ByteArrayInputStream(bytes))) {
+                return document.getRange().text();
+            }
+        }
+        if ("xlsx".equals(type) || "xls".equals(type)) {
+            StringBuilder result = new StringBuilder();
+            try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(bytes))) {
+                for (Sheet sheet : workbook) {
+                    result.append("## ").append(sheet.getSheetName()).append("\n\n");
+                    for (Row row : sheet) {
+                        List<String> cells = new java.util.ArrayList<>();
+                        for (Cell cell : row) cells.add(cell.toString().replace("|", "\\|"));
+                        if (!cells.isEmpty()) result.append("| ").append(String.join(" | ", cells)).append(" |\n");
+                    }
+                    result.append("\n");
+                }
+            }
+            return result.toString();
+        }
+        if ("pptx".equals(type)) {
+            StringBuilder result = new StringBuilder();
+            try (XMLSlideShow slideshow = new XMLSlideShow(new ByteArrayInputStream(bytes))) {
+                int slideNumber = 1;
+                for (XSLFSlide slide : slideshow.getSlides()) {
+                    result.append("## 幻灯片 ").append(slideNumber++).append("\n\n");
+                    for (XSLFShape shape : slide.getShapes()) {
+                        if (shape instanceof XSLFTextShape textShape && !textShape.getText().isBlank()) {
+                            result.append(textShape.getText()).append("\n\n");
+                        }
+                    }
+                }
+            }
+            return result.toString();
+        }
+        if ("ppt".equals(type)) {
+            StringBuilder result = new StringBuilder();
+            try (HSLFSlideShow slideshow = new HSLFSlideShow(new ByteArrayInputStream(bytes))) {
+                int slideNumber = 1;
+                for (HSLFSlide slide : slideshow.getSlides()) {
+                    result.append("## 幻灯片 ").append(slideNumber++).append("\n\n");
+                    for (HSLFShape shape : slide.getShapes()) {
+                        if (shape instanceof HSLFTextShape textShape && !textShape.getText().isBlank()) {
+                            result.append(textShape.getText()).append("\n\n");
+                        }
+                    }
+                }
+            }
+            return result.toString();
+        }
+        throw new BusinessException(400, "当前格式暂不支持在线编辑");
     }
 
     @Override

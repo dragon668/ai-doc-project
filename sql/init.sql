@@ -152,6 +152,18 @@ CREATE TABLE IF NOT EXISTS `user_friend` (
     KEY `idx_friend` (`friend_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='好友关系表';
 
+-- 好友聊天消息表，content 使用后端 AES-GCM 加密保存
+CREATE TABLE IF NOT EXISTS `chat_message` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `sender_id` BIGINT NOT NULL,
+    `receiver_id` BIGINT NOT NULL,
+    `content` TEXT NOT NULL,
+    `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_chat_pair_time` (`sender_id`, `receiver_id`, `create_time`),
+    KEY `idx_chat_receiver_time` (`receiver_id`, `create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='好友聊天消息表';
+
 -- AI接口配置表
 CREATE TABLE IF NOT EXISTS `ai_api_config` (
     `id` BIGINT NOT NULL AUTO_INCREMENT,

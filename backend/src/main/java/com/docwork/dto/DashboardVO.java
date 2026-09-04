@@ -2,6 +2,8 @@ package com.docwork.dto;
 
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class DashboardVO {
     private long totalDocs;
@@ -12,4 +14,8 @@ public class DashboardVO {
     private long parsingDocs;
     private long sharedLinks;
     private long totalConversations;
+    private long editCount;
+    private long contributionCount;
+    private long activeDays;
+    private List<Integer> activity;
 }

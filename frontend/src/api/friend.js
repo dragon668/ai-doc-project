@@ -19,3 +19,11 @@ export function listFriendRequests() {
 export function approveFriendRequest(requestId) {
   return request.post(`/friend/requests/${requestId}/approve`)
 }
+
+export function listChatMessages(friendId) {
+  return request.get(`/friend/chat/${friendId}`)
+}
+
+export function sendChatMessage(friendId, content) {
+  return request.post(`/friend/chat/${friendId}`, { content })
+}

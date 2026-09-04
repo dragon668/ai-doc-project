@@ -8,9 +8,11 @@
       <el-color-picker v-model="strokeColor" />
       <el-button @click="addText">添加文字</el-button>
       <el-button @click="clearCanvas">清空</el-button>
-      <el-button @click="exportPng">导出 PNG</el-button>
+      <el-button @click="exportPng">导出内容 PNG</el-button>
+      <el-button @click="exportCustomCrop">自定义裁剪</el-button>
+      <el-button @click="exportSvg">导出 SVG</el-button>
       <el-button type="primary" @click="insertIntoDocument">插入文档</el-button>
-      <span class="canvas-tip">滚轮缩放 · 平移模式拖动画布</span>
+      <span class="canvas-tip">画布可持续平移 · 滚轮缩放 · 导出默认裁剪内容</span>
     </div>
     <div ref="viewport" class="canvas-viewport" @wheel.prevent="zoomCanvas">
       <canvas ref="canvas" @pointerdown="startPointer" @pointermove="movePointer" @pointerup="endPointer" @pointerleave="endPointer" />
@@ -31,7 +33,9 @@ const scale = ref(1)
 const offset = ref({ x: 0, y: 0 })
 const drawing = ref(false)
 const lastPoint = ref(null)
-const canvasSize = { width: 1400, height: 800 }
+const canvasSize = { width: 4000, height: 2400 }
+const strokes = ref([])
+const textItems = ref([])
 
 function context() {
   return canvas.value.getContext('2d')
@@ -62,6 +66,30 @@ function drawGrid() {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvasSize.width, y); ctx.stroke()
   }
   ctx.restore()
+  drawContent()
+}
+
+function drawContent() {
+  const ctx = context()
+  ctx.save()
+  for (const stroke of strokes.value) {
+    ctx.strokeStyle = stroke.color
+    ctx.lineWidth = stroke.width
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.beginPath()
+    stroke.points.forEach((item, index) => {
+      if (index === 0) ctx.moveTo(item.x, item.y)
+      else ctx.lineTo(item.x, item.y)
+    })
+    ctx.stroke()
+  }
+  for (const item of textItems.value) {
+    ctx.fillStyle = item.color
+    ctx.font = `${item.size}px Microsoft YaHei`
+    ctx.fillText(item.text, item.x, item.y)
+  }
+  ctx.restore()
 }
 
 function point(event) {
@@ -69,24 +97,43 @@ function point(event) {
   return { x: (event.clientX - rect.left) / scale.value, y: (event.clientY - rect.top) / scale.value }
 }
 
+function ensureCanvasSpace(item) {
+  const edge = 240
+  let expanded = false
+  if (item.x > canvasSize.width - edge) {
+    canvasSize.width += 2000
+    expanded = true
+  }
+  if (item.y > canvasSize.height - edge) {
+    canvasSize.height += 1200
+    expanded = true
+  }
+  if (expanded) resizeCanvas()
+  return expanded
+}
+
 function startPointer(event) {
   canvas.value.setPointerCapture(event.pointerId)
   drawing.value = true
-  lastPoint.value = point(event)
+  const initialPoint = point(event)
+  if (mode.value === 'draw' && ensureCanvasSpace(initialPoint)) lastPoint.value = point(event)
+  else lastPoint.value = initialPoint
+  if (mode.value === 'draw') {
+    strokes.value.push({ color: strokeColor.value, width: 3 / scale.value, points: [lastPoint.value] })
+  }
 }
 
 function movePointer(event) {
   if (!drawing.value) return
-  const current = point(event)
-  const ctx = context()
+  let current = point(event)
+  if (mode.value === 'draw' && ensureCanvasSpace(current)) current = point(event)
   if (mode.value === 'pan') {
     offset.value = { x: offset.value.x + event.movementX, y: offset.value.y + event.movementY }
     canvas.value.style.transform = `translate(${offset.value.x}px, ${offset.value.y}px) scale(${scale.value})`
   } else {
-    ctx.strokeStyle = strokeColor.value
-    ctx.lineWidth = 3 / scale.value
-    ctx.lineCap = 'round'
-    ctx.beginPath(); ctx.moveTo(lastPoint.value.x, lastPoint.value.y); ctx.lineTo(current.x, current.y); ctx.stroke()
+    const stroke = strokes.value[strokes.value.length - 1]
+    stroke.points.push(current)
+    drawGrid()
   }
   lastPoint.value = current
 }
@@ -105,30 +152,107 @@ function zoomCanvas(event) {
 async function addText() {
   try {
     const result = await ElMessageBox.prompt('输入要放置在画布上的文字', '添加文字', { inputPlaceholder: '例如：项目流程' })
-    const ctx = context()
-    ctx.fillStyle = strokeColor.value
-    ctx.font = 'bold 24px Microsoft YaHei'
-    ctx.fillText(result.value, 120, 120 + Math.random() * 300)
+    textItems.value.push({ text: result.value, color: strokeColor.value, size: 24, x: 120, y: 120 + textItems.value.length * 42 })
+    drawGrid()
   } catch (error) {
     if (error !== 'cancel') ElMessage.error('添加文字失败')
   }
 }
 
 function clearCanvas() {
+  strokes.value = []
+  textItems.value = []
   drawGrid()
 }
 
-function exportPng() {
+function contentBounds() {
+  const points = strokes.value.flatMap(stroke => stroke.points)
+  const textBounds = textItems.value.map(item => ({ x: item.x, y: item.y - item.size, width: item.text.length * item.size, height: item.size }))
+  const all = [
+    ...points.map(item => ({ x: item.x, y: item.y, width: 0, height: 0 })),
+    ...textBounds
+  ]
+  if (!all.length) return { x: 0, y: 0, width: 1, height: 1 }
+  const padding = 24
+  const left = Math.max(0, Math.min(...all.map(item => item.x)) - padding)
+  const top = Math.max(0, Math.min(...all.map(item => item.y)) - padding)
+  const right = Math.min(canvasSize.width, Math.max(...all.map(item => item.x + item.width)) + padding)
+  const bottom = Math.min(canvasSize.height, Math.max(...all.map(item => item.y + item.height)) + padding)
+  return { x: left, y: top, width: Math.max(1, right - left), height: Math.max(1, bottom - top) }
+}
+
+function renderCrop(bounds, mime = 'image/png') {
+  const output = document.createElement('canvas')
+  output.width = Math.ceil(bounds.width)
+  output.height = Math.ceil(bounds.height)
+  const ctx = output.getContext('2d')
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, output.width, output.height)
+  ctx.translate(-bounds.x, -bounds.y)
+  for (const stroke of strokes.value) {
+    ctx.strokeStyle = stroke.color
+    ctx.lineWidth = stroke.width
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+    ctx.beginPath()
+    stroke.points.forEach((item, index) => index ? ctx.lineTo(item.x, item.y) : ctx.moveTo(item.x, item.y))
+    ctx.stroke()
+  }
+  for (const item of textItems.value) {
+    ctx.fillStyle = item.color
+    ctx.font = `${item.size}px Microsoft YaHei`
+    ctx.fillText(item.text, item.x, item.y)
+  }
+  return output.toDataURL(mime)
+}
+
+function download(dataUrl, filename) {
   const link = document.createElement('a')
-  link.download = 'docwork-canvas.png'
-  link.href = canvas.value.toDataURL('image/png')
+  link.download = filename
+  link.href = dataUrl
   link.click()
-  ElMessage.success('画布已导出')
+}
+
+function exportPng() {
+  download(renderCrop(contentBounds()), 'docwork-canvas-content.png')
+  ElMessage.success('已按内容范围导出 PNG')
+}
+
+async function exportCustomCrop() {
+  try {
+    const result = await ElMessageBox.prompt('输入裁剪范围：x,y,width,height（画布坐标）', '自定义裁剪', {
+      inputValue: Object.values(contentBounds()).join(','),
+      inputPlaceholder: '例如：100,100,800,500'
+    })
+    const values = result.value.split(',').map(Number)
+    if (values.length !== 4 || values.some(value => !Number.isFinite(value) || value <= 0)) throw new Error('invalid')
+    const [x, y, width, height] = values
+    download(renderCrop({ x, y, width, height }), 'docwork-canvas-crop.png')
+    ElMessage.success('已导出自定义裁剪区域')
+  } catch (error) {
+    if (error !== 'cancel') ElMessage.error('裁剪范围格式应为 x,y,width,height')
+  }
+}
+
+function svgDataUrl(bounds = contentBounds()) {
+  const lines = strokes.value.map(stroke => `<polyline points="${stroke.points.map(item => `${item.x},${item.y}`).join(' ')}" fill="none" stroke="${stroke.color}" stroke-width="${stroke.width}" stroke-linecap="round" stroke-linejoin="round"/>`).join('')
+  const labels = textItems.value.map(item => `<text x="${item.x}" y="${item.y}" fill="${item.color}" font-size="${item.size}" font-family="Microsoft YaHei">${escapeXml(item.text)}</text>`).join('')
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width}" height="${bounds.height}" viewBox="${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}"><rect width="100%" height="100%" fill="white"/>${lines}${labels}</svg>`
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
+
+function escapeXml(value) {
+  return value.replace(/[<>&'"]/g, char => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[char])
+}
+
+function exportSvg() {
+  download(svgDataUrl(), 'docwork-canvas-content.svg')
+  ElMessage.success('已按内容范围导出 SVG')
 }
 
 function insertIntoDocument() {
-  emit('insert', canvas.value.toDataURL('image/png'))
-  ElMessage.success('画布已插入文档')
+  emit('insert', svgDataUrl())
+  ElMessage.success('已插入矢量画布内容')
 }
 
 onMounted(async () => {

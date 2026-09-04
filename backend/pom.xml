@@ -31,6 +31,8 @@
         <sentinel.version>1.8.7</sentinel.version>
         <xxl-job.version>2.4.2</xxl-job.version>
         <hutool.version>5.8.26</hutool.version>
+        <poi.version>5.2.5</poi.version>
+        <pdfbox.version>3.0.2</pdfbox.version>
     </properties>
 
     <dependencies>
@@ -128,6 +130,23 @@
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-all</artifactId>
             <version>${hutool.version}</version>
+        </dependency>
+
+        <!-- Office/PDF text extraction for the online editor -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>${poi.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-scratchpad</artifactId>
+            <version>${poi.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>${pdfbox.version}</version>
         </dependency>
 
         <!-- Lombok -->
